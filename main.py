@@ -102,6 +102,8 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
             chat_id = chat.get('id')
             title = chat.get('title')
             admin_user_id = inviter.get('id')
+            admin_username = inviter.get('username')
+            admin_first_name = inviter.get('first_name')
 
             if status not in {'administrator', 'creator'}:
                 logger.info("Register group skipped because bot is no longer admin")
@@ -111,6 +113,15 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
                 logger.error("Cannot register group: missing chat id in my_chat_member payload")
                 return False
 
+            # ✅ ENSURE USER EXISTS FIRST
+            if admin_user_id:
+                db_manager.ensure_user_exists(
+                    user_id=admin_user_id,
+                    username=admin_username,
+                    first_name=admin_first_name
+                )
+
+            # Now insert the group
             db_manager.upsert_managed_group(
                 group_id=chat_id,
                 title=title,

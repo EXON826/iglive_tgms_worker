@@ -65,7 +65,34 @@ class DatabaseManager:
             yield connection
         finally:
             connection.close()
-    
+
+    def ensure_user_exists(self, user_id: int, username: Optional[str] = None, first_name: Optional[str] = None):
+        """Ensure user exists in users table, create if missing"""
+        try:
+            with self.get_session() as session:
+                # Check if user exists
+                check_query = text("SELECT user_id FROM users WHERE user_id = :user_id")
+                exists = session.execute(check_query, {"user_id": user_id}).fetchone()
+
+                if not exists:
+                    # Insert minimal user record
+                    insert_query = text("""
+                        INSERT INTO users (user_id, username, first_name, points, created_at, last_seen)
+                        VALUES (:user_id, :username, :first_name, 0, NOW(), NOW())
+                        ON CONFLICT (user_id) DO NOTHING
+                    """)
+                    session.execute(insert_query, {
+                        "user_id": user_id,
+                        "username": username,
+                        "first_name": first_name or "Unknown"
+                    })
+                    logger.info(f"✅ Created user {user_id} in database")
+
+                return True
+        except Exception as e:
+            logger.error(f"❌ Failed to ensure user exists: {e}", exc_info=True)
+            return False
+
     # --- Managed Groups Operations ---
     
     def get_active_managed_groups(self) -> List[Dict[str, Any]]:
