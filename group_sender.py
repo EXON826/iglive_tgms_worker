@@ -36,8 +36,26 @@ class GroupMessageSender:
             time.sleep(min_interval - time_since_last)
         
         self.last_send_time = time.time()
+
+    def _create_url_button_markup(self, watch_link: str = None) -> dict:
+        """Create inline keyboard markup with URL button"""
+        if not watch_link:
+            return None
+            
+        # Create inline keyboard with single URL button
+        inline_keyboard = {
+            "inline_keyboard": [
+                [
+                    {
+                        "text": "📺 Watch Live",
+                        "url": watch_link
+                    }
+                ]
+            ]
+        }
+        return inline_keyboard
     
-    def send_to_groups(self, photo_url: str = None, caption: str = None, text: str = None):
+    def send_to_groups(self, photo_url: str = None, caption: str = None, text: str = None, watch_link: str = None):
         """
         Send message to all active managed groups
         
@@ -45,6 +63,7 @@ class GroupMessageSender:
             photo_url: URL of photo to send
             caption: Caption for photo
             text: Text message (if no photo)
+            watch_link: URL for watch button (creates inline keyboard)
         
         Returns:
             Dict with success count and failed groups
@@ -56,6 +75,9 @@ class GroupMessageSender:
             "failed": [],
             "sent_to": []
         }
+        
+        # Create inline keyboard markup if watch link is provided
+        reply_markup = self._create_url_button_markup(watch_link)
         
         logger.info(f"Sending message to {len(groups)} groups")
         
@@ -86,13 +108,15 @@ class GroupMessageSender:
                         chat_id=group_id,
                         photo=photo_url,
                         caption=caption_with_debug if caption else debug_code,
-                        parse_mode="MarkdownV2"
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
                     )
                 else:
                     response = self.api.send_message(
                         chat_id=group_id,
                         text=text,
-                        parse_mode="MarkdownV2"
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
                     )
                 
                 if response.get("ok"):

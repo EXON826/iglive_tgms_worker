@@ -195,7 +195,7 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
 
                     # Reconstruct caption/text
                     if watch_link:
-                        text = f"🔴 {username} is LIVE now!\n\n📺 Watch here: {watch_link}"
+                        text = f"🔴 {username} is LIVE now!"
                         caption = f"🔴 {username} is LIVE!"
                     else:
                         logger.warning(f"No watch link found for {username}, sending message without a link.")
@@ -210,7 +210,8 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
             results = group_sender.send_to_groups(
                 photo_url=photo_url,
                 caption=caption,
-                text=text
+                text=text,
+                watch_link=watch_link
             )
             
             logger.info(f"Broadcast results: {results['success']}/{results['total']} successful")

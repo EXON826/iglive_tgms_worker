@@ -41,13 +41,21 @@ class TelegramAPI:
         else:
             logger.warning(f"Could not refresh bot identity: {result.get('error')}")
 
-    def send_message(self, chat_id: int, text: str, **kwargs):
-        """Send text message"""
-        return self._request("sendMessage", chat_id=chat_id, text=text, **kwargs)
+    def send_message(self, chat_id: int, text: str, reply_markup=None, **kwargs):
+        """Send text message with optional inline keyboard"""
+        payload = {"chat_id": chat_id, "text": text}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        payload.update(kwargs)
+        return self._request("sendMessage", **payload)
     
-    def send_photo(self, chat_id: int, photo: str, **kwargs):
-        """Send photo"""
-        return self._request("sendPhoto", chat_id=chat_id, photo=photo, **kwargs)
+    def send_photo(self, chat_id: int, photo: str, reply_markup=None, **kwargs):
+        """Send photo with optional inline keyboard"""
+        payload = {"chat_id": chat_id, "photo": photo}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        payload.update(kwargs)
+        return self._request("sendPhoto", **payload)
     
     def approve_join_request(self, chat_id: int, user_id: int):
         """Approve chat join request"""
