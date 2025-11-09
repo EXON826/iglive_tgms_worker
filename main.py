@@ -173,8 +173,25 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
                     # Use monetized URL with fallbacks
                     watch_link = insta_link_details.get('monetized_url') or insta_link_details.get('general_link') or insta_link_details.get('link')
                     
-                    # Use imgbb_url for photo, with fallback to original payload
-                    photo_url = insta_link_details.get('imgbb_url') or photo_url
+                    # --- Image Cycling Logic ---
+                    imgbb_urls_str = insta_link_details.get('imgbb_url', '')
+                    if imgbb_urls_str and isinstance(imgbb_urls_str, str):
+                        image_urls = [url.strip() for url in imgbb_urls_str.split('\n') if url.strip()]
+                        if image_urls:
+                            last_index = insta_link_details.get('last_used_image_index')
+                            if last_index is None:
+                                last_index = -1
+                            
+                            next_index = (last_index + 1) % len(image_urls)
+                            photo_url = image_urls[next_index]
+                            
+                            # Update the index in the database
+                            db_manager.update_last_used_image_index(insta_link_details['id'], next_index)
+                        else:
+                            photo_url = payload.get('photo_url') # Fallback
+                    else:
+                        photo_url = payload.get('photo_url') # Fallback
+                    # --- End Image Cycling Logic ---
 
                     # Reconstruct caption/text
                     if watch_link:
