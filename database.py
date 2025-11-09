@@ -187,6 +187,23 @@ class DatabaseManager:
             )
             conn.commit()
 
+    def log_sent_message(self, group_id: int, message_id: int, debug_code: str):
+        """Log a sent message in the database"""
+        with self.get_connection() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO sent_messages (group_id, message_id, debug_code, sent_at)
+                    VALUES (:group_id, :message_id, :debug_code, NOW())
+                """),
+                {
+                    "group_id": group_id,
+                    "message_id": message_id,
+                    "debug_code": debug_code,
+                }
+            )
+            conn.commit()
+            logger.debug(f"Logged sent message {message_id} to group {group_id}")
+
     def upsert_managed_group(
         self,
         group_id: int,
