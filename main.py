@@ -5,6 +5,7 @@ Handles group management and broadcasting jobs
 import os
 import json
 import logging
+import re
 import asyncio
 from datetime import datetime, timezone
 from sqlalchemy import create_engine, text
@@ -24,6 +25,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 POLLING_INTERVAL = 2  # seconds
+
+
+def escape_markdown_v2(text: str) -> str:
+    """Escapes characters for Telegram's MarkdownV2 parse mode."""
+    if not text:
+        return ""
+    # Characters to escape for MarkdownV2.
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    # Use a regex to add a backslash before any of these characters.
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
 
 async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_handler):
@@ -144,6 +155,11 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
             caption = payload.get('caption')
             text = payload.get('text')
             
+            if caption:
+                caption = escape_markdown_v2(caption)
+            if text:
+                text = escape_markdown_v2(text)
+
             results = group_sender.send_to_groups(
                 photo_url=photo_url,
                 caption=caption,

@@ -86,13 +86,13 @@ class GroupMessageSender:
                         chat_id=group_id,
                         photo=photo_url,
                         caption=caption_with_debug if caption else debug_code,
-                        parse_mode="Markdown"
+                        parse_mode="MarkdownV2"
                     )
                 else:
                     response = self.api.send_message(
                         chat_id=group_id,
                         text=text,
-                        parse_mode="Markdown"
+                        parse_mode="MarkdownV2"
                     )
                 
                 if response.get("ok"):
