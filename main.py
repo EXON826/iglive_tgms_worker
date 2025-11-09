@@ -195,12 +195,12 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
 
                     # Reconstruct caption/text
                     if watch_link:
-                        text = f"🔴 {username} is LIVE now!"
-                        caption = f"🔴 {username} is LIVE!"
+                        text = "🚨 LIVE NOW! 🚨\n═══════════════════"
+                        caption = "🚨 LIVE NOW! 🚨\n═══════════════════"
                     else:
                         logger.warning(f"No watch link found for {username}, sending message without a link.")
-                        text = f"🔴 {username} is LIVE now!"
-                        caption = f"🔴 {username} is LIVE!"
+                        text = "🚨 LIVE NOW! 🚨\n═══════════════════"
+                        caption = "🚨 LIVE NOW! 🚨\n═══════════════════"
 
             if caption:
                 caption = escape_markdown_v2(caption)
