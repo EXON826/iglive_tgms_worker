@@ -47,7 +47,7 @@ class GroupMessageSender:
             "inline_keyboard": [
                 [
                     {
-                        "text": "📺 Watch Live",
+                        "text": "🚀 JOIN LIVE",
                         "url": watch_link
                     }
                 ]
