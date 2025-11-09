@@ -204,6 +204,21 @@ class DatabaseManager:
             conn.commit()
             logger.debug(f"Logged sent message {message_id} to group {group_id}")
 
+    def get_insta_link(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get the latest insta_links record for a given username."""
+        with self.get_connection() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT * FROM insta_links 
+                    WHERE username = :username 
+                    ORDER BY timestamp DESC 
+                    LIMIT 1
+                """),
+                {"username": username}
+            )
+            row = result.fetchone()
+            return dict(row._mapping) if row else None
+
     def upsert_managed_group(
         self,
         group_id: int,

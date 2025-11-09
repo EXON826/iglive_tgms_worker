@@ -151,10 +151,40 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
 
         elif job_type == 'send_to_groups':
             # Broadcast message to all managed groups
+            original_text = payload.get('text', '')
+            username = None
             photo_url = payload.get('photo_url')
             caption = payload.get('caption')
             text = payload.get('text')
-            
+
+            # Extract username from text like "🔴 username is LIVE now!"
+            match = re.search(r'🔴 (.*?) is LIVE now!', original_text)
+            if match:
+                username = match.group(1).strip()
+
+            if not username:
+                logger.error(f"Could not extract username from job payload for job_id: {job_id}")
+            else:
+                insta_link_details = db_manager.get_insta_link(username)
+
+                if not insta_link_details:
+                    logger.error(f"No insta_links record found for username: {username} for job_id: {job_id}")
+                else:
+                    # Use monetized URL with fallbacks
+                    watch_link = insta_link_details.get('monetized_url') or insta_link_details.get('general_link') or insta_link_details.get('link')
+                    
+                    # Use imgbb_url for photo, with fallback to original payload
+                    photo_url = insta_link_details.get('imgbb_url') or photo_url
+
+                    # Reconstruct caption/text
+                    if watch_link:
+                        text = f"🔴 {username} is LIVE now!\n\n📺 Watch here: {watch_link}"
+                        caption = f"🔴 {username} is LIVE!"
+                    else:
+                        logger.warning(f"No watch link found for {username}, sending message without a link.")
+                        text = f"🔴 {username} is LIVE now!"
+                        caption = f"🔴 {username} is LIVE!"
+
             if caption:
                 caption = escape_markdown_v2(caption)
             if text:
