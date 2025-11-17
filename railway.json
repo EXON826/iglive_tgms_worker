@@ -3,6 +3,6 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "pip install -r requirements.txt && python main.py"
+    "startCommand": "python main.py"
   }
 }
