@@ -1,11 +1,15 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "python311Packages.virtualenv"]
+# Bring Python and virtualenv into the image
+nixPkgs = ["python311", "python311Packages.virtualenv"]
 
 [phases.install]
+# Create a venv and install deps into it
 cmds = [
-    "python -m venv /opt/venv",
-    ". /opt/venv/bin/activate && pip install -r requirements.txt"
+  "python -m virtualenv /opt/venv",
+  "/opt/venv/bin/pip install --upgrade pip",
+  "/opt/venv/bin/pip install --no-cache-dir -r requirements.txt"
 ]
 
 [start]
-cmd = ". /opt/venv/bin/activate && python main.py"
+# Run your app using the venv's Python
+cmd = "/opt/venv/bin/python main.py"
