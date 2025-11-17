@@ -25,8 +25,8 @@ Thumbs.db
 
 # Development files
 *.md
-*.txt
 *.sql
+!requirements.txt
 __pycache__/
 *.pyc
 *.pyo
