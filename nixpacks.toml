@@ -5,7 +5,7 @@ nixPkgs = ["python311", "python311Packages.virtualenv"]
 [phases.install]
 # Create a venv and install deps into it
 cmds = [
-  "python -m virtualenv /opt/venv",
+  "virtualenv /opt/venv",
   "/opt/venv/bin/pip install --upgrade pip",
   "/opt/venv/bin/pip install --no-cache-dir -r requirements.txt"
 ]
