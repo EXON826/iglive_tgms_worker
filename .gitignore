@@ -1,0 +1,38 @@
+# TGMS Worker Files
+FEATURE_IMPLEMENTATIONS.md
+add_groups_column.sql
+
+# Dependencies
+node_modules/
+*.log
+.env
+.env.local
+
+# Build outputs
+dist/
+build/
+*.min.js
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Development files
+*.md
+*.txt
+*.sql
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+.mypy_cache/
