@@ -204,6 +204,24 @@ class DatabaseManager:
             )
             conn.commit()
 
+    def log_sent_message(self, group_id: int, message_id: int, debug_code: str):
+        """Log a sent message in the database"""
+        with self.get_connection() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO sent_messages (group_id, message_id, debug_code, sent_at)
+                    VALUES (:group_id, :message_id, :debug_code, NOW())
+                    ON CONFLICT DO NOTHING
+                """),
+                {
+                    "group_id": group_id,
+                    "message_id": message_id,
+                    "debug_code": debug_code,
+                }
+            )
+            conn.commit()
+            logger.debug(f"Logged sent message {message_id} to group {group_id}")
+
     def update_last_used_image_index(self, link_id: int, new_index: int):
         """Update the last_used_image_index for a specific insta_links record."""
         with self.get_connection() as conn:
