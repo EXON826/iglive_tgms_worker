@@ -76,6 +76,8 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
             chat_id = chat_join_request.get('chat', {}).get('id')
             user_id = chat_join_request.get('from', {}).get('id')
             username = chat_join_request.get('from', {}).get('username', '')
+            first_name = chat_join_request.get('from', {}).get('first_name', 'Unknown')
+            last_name = chat_join_request.get('from', {}).get('last_name')
 
             if chat_id and user_id:
                 managed_group = db_manager.get_managed_group(chat_id)
@@ -96,7 +98,9 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
                 success = await join_handler.process_join_request(
                     chat_id=chat_id,
                     user_id=user_id,
-                    username=username
+                    username=username,
+                    first_name=first_name,
+                    last_name=last_name
                 )
                 return success
             else:

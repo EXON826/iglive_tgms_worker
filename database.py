@@ -310,6 +310,7 @@ class DatabaseManager:
                 text("""
                     INSERT INTO join_requests (user_id, chat_id, status, created_at)
                     VALUES (:user_id, :chat_id, 'pending', NOW())
+                    ON CONFLICT (user_id, chat_id, status) DO NOTHING
                 """),
                 {"user_id": user_id, "chat_id": chat_id}
             )
@@ -343,19 +344,34 @@ class DatabaseManager:
             )
             return result.fetchone() is not None
     
-    def update_user_group(self, user_id: int, group_id: int):
-        """Update user's group membership"""
+    def update_user_group(self, user_id: int, group_id: int, first_name: str = 'Unknown', last_name: str = None, username: str = None):
+        """Update user's group membership and ensure user exists"""
         with self.get_connection() as conn:
             conn.execute(
                 text("""
-                    INSERT INTO all_tele_users (id, groups, updated_at, last_seen)
-                    VALUES (:user_id, :group_id, NOW(), NOW())
+                    INSERT INTO all_tele_users (
+                        id, groups, first_name, last_name, username, 
+                        updated_at, last_seen
+                    )
+                    VALUES (
+                        :user_id, :group_id, :first_name, :last_name, :username,
+                        NOW(), NOW()
+                    )
                     ON CONFLICT (id) DO UPDATE SET
                         groups = EXCLUDED.groups,
+                        first_name = COALESCE(EXCLUDED.first_name, all_tele_users.first_name),
+                        last_name = COALESCE(EXCLUDED.last_name, all_tele_users.last_name),
+                        username = COALESCE(EXCLUDED.username, all_tele_users.username),
                         updated_at = NOW(),
                         last_seen = NOW()
                 """),
-                {"user_id": user_id, "group_id": group_id}
+                {
+                    "user_id": user_id, 
+                    "group_id": group_id,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "username": username
+                }
             )
             conn.commit()
             logger.info(f"Updated user {user_id} group membership to {group_id}")
