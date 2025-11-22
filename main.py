@@ -173,8 +173,27 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
                 if not insta_link_details:
                     logger.error(f"No insta_links record found for username: {username} for job_id: {job_id}")
                 else:
-                    # Use monetized URL with fallbacks
-                    watch_link = insta_link_details.get('monetized_url') or insta_link_details.get('general_link') or insta_link_details.get('link')
+                    # Use monetized URL with fallbacks - LINK CYCLING LOGIC
+                    monetized_urls_str = insta_link_details.get('monetized_url', '')
+                    if monetized_urls_str and isinstance(monetized_urls_str, str):
+                        link_urls = [url.strip() for url in monetized_urls_str.split('\n') if url.strip()]
+                        if link_urls:
+                            last_link_index = insta_link_details.get('last_used_link_index')
+                            if last_link_index is None:
+                                last_link_index = -1
+                            
+                            next_link_index = (last_link_index + 1) % len(link_urls)
+                            watch_link = link_urls[next_link_index]
+                            
+                            # Update the link index in the database
+                            db_manager.update_last_used_link_index(insta_link_details['id'], next_link_index)
+                            logger.info(f"Using monetized link {next_link_index + 1}/{len(link_urls)} for {username}")
+                        else:
+                            # Fallback to general link if no monetized links
+                            watch_link = insta_link_details.get('general_link') or insta_link_details.get('link')
+                    else:
+                        # Fallback to general link if monetized_url is not available
+                        watch_link = insta_link_details.get('general_link') or insta_link_details.get('link')
                     
                     # --- Image Cycling Logic ---
                     imgbb_urls_str = insta_link_details.get('imgbb_url', '')

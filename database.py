@@ -237,6 +237,21 @@ class DatabaseManager:
             conn.commit()
             logger.info(f"Updated last_used_image_index to {new_index} for link_id {link_id}")
 
+    def update_last_used_link_index(self, link_id: int, new_index: int):
+        """Update the last_used_link_index for a specific insta_links record."""
+        with self.get_connection() as conn:
+            conn.execute(
+                text("""
+                    UPDATE insta_links 
+                    SET last_used_link_index = :new_index,
+                        last_updated = NOW()
+                    WHERE id = :link_id
+                """),
+                {"new_index": new_index, "link_id": link_id}
+            )
+            conn.commit()
+            logger.info(f"Updated last_used_link_index to {new_index} for link_id {link_id}")
+
     def get_insta_link(self, username: str) -> Optional[Dict[str, Any]]:
         """Get the latest insta_links record for a given username."""
         with self.get_connection() as conn:
@@ -251,6 +266,7 @@ class DatabaseManager:
             )
             row = result.fetchone()
             return dict(row._mapping) if row else None
+
 
     def upsert_managed_group(
         self,
