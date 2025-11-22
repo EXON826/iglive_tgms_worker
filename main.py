@@ -161,6 +161,9 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
             match = re.search(r'🔴 (.*?) is LIVE now!', original_text)
             if match:
                 username = match.group(1).strip()
+            
+            logger.debug(f"Job {job_id}: Original text: '{original_text}'")
+            logger.debug(f"Job {job_id}: Extracted username: '{username}'")
 
             if not username:
                 logger.error(f"Could not extract username from job payload for job_id: {job_id}")
