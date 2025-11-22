@@ -132,11 +132,19 @@ class GroupMessageSender:
                 
                 if response.get("ok"):
                     message_id = response.get("result", {}).get("message_id")
-                    self.db.log_sent_message(group_id, message_id, debug_code)
                     
-                    # Save notification for future deletion
+                    # Log sent message (non-critical)
+                    try:
+                        self.db.log_sent_message(group_id, message_id, debug_code)
+                    except Exception as e:
+                        logger.error(f"Failed to log sent message {message_id} for group {group_id}: {e}")
+                    
+                    # Save notification for future deletion (CRITICAL)
                     if instagram_username:
-                        self.db.save_notification(group_id, instagram_username, message_id)
+                        try:
+                            self.db.save_notification(group_id, instagram_username, message_id)
+                        except Exception as e:
+                            logger.error(f"Failed to save notification for {instagram_username} in {group_id}: {e}")
 
                     self.db.reset_failure_count(group_id)
                     results["success"] += 1
@@ -146,7 +154,16 @@ class GroupMessageSender:
                     raise Exception(response.get("error", "Unknown error"))
                     
             except Exception as e:
-                logger.error(f"✗ Failed to send to group {group_id}: {e}")
+                error_msg = str(e)
+                logger.error(f"✗ Failed to send to group {group_id}: {error_msg}")
+                
+                # Check for critical Telegram errors
+                if "403" in error_msg or "Forbidden" in error_msg or "kicked" in error_msg.lower():
+                    self.db.deactivate_group(group_id, f"Critical error: {error_msg}")
+                    logger.warning(f"Deactivated group {group_id} immediately due to critical error")
+                    results["failed"].append({"group_id": group_id, "error": error_msg})
+                    continue
+
                 failure_count = self.db.increment_failure_count(group_id)
                 
                 # Deactivate after max failures
