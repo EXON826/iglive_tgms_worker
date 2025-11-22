@@ -204,6 +204,11 @@ class DatabaseManager:
             )
             conn.commit()
 
+    def update_last_used_image_index(self, link_id: int, new_index: int):
+        """Update the last_used_image_index for a specific insta_links record."""
+        with self.get_connection() as conn:
+            conn.execute(
+                text("""
                     UPDATE insta_links 
                     SET last_used_image_index = :new_index,
                         last_updated = NOW()
