@@ -19,7 +19,7 @@ from join_request_handler import JoinRequestHandler
 
 # --- Logging Setup ---
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - [TGMS] - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
