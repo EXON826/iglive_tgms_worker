@@ -55,7 +55,7 @@ class GroupMessageSender:
         }
         return inline_keyboard
     
-    def send_to_groups(self, photo_url: str = None, caption: str = None, text: str = None, watch_link: str = None):
+    def send_to_groups(self, photo_url: str = None, caption: str = None, text: str = None, watch_link: str = None, instagram_username: str = None):
         """
         Send message to all active managed groups
         
@@ -64,6 +64,7 @@ class GroupMessageSender:
             caption: Caption for photo
             text: Text message (if no photo)
             watch_link: URL for watch button (creates inline keyboard)
+            instagram_username: Username of the Instagram user going live (for tracking previous messages)
         
         Returns:
             Dict with success count and failed groups
@@ -91,6 +92,16 @@ class GroupMessageSender:
             
             # Apply rate limiting
             self._rate_limit_delay()
+
+            # Delete previous notification if username provided
+            if instagram_username:
+                last_msg_id = self.db.get_last_notification(group_id, instagram_username)
+                if last_msg_id:
+                    try:
+                        self.api.delete_message(group_id, last_msg_id)
+                        logger.debug(f"Deleted previous notification {last_msg_id} for {instagram_username} in {group_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {e}")
             
             # Generate debug code
             debug_code = self._generate_debug_code()
@@ -122,6 +133,11 @@ class GroupMessageSender:
                 if response.get("ok"):
                     message_id = response.get("result", {}).get("message_id")
                     self.db.log_sent_message(group_id, message_id, debug_code)
+                    
+                    # Save notification for future deletion
+                    if instagram_username:
+                        self.db.save_notification(group_id, instagram_username, message_id)
+
                     self.db.reset_failure_count(group_id)
                     results["success"] += 1
                     results["sent_to"].append(group_id)

@@ -211,7 +211,8 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
                 photo_url=photo_url,
                 caption=caption,
                 text=text,
-                watch_link=watch_link
+                watch_link=watch_link,
+                instagram_username=username
             )
             
             logger.info(f"Broadcast results: {results['success']}/{results['total']} successful")

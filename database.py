@@ -343,6 +343,34 @@ class DatabaseManager:
             conn.commit()
             logger.info(f"Updated user {user_id} group membership to {group_id}")
 
+    def get_last_notification(self, group_id: int, username: str) -> Optional[int]:
+        """Get the last notification message ID for a specific user in a group"""
+        with self.get_connection() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT message_id FROM live_notification_messages 
+                    WHERE group_id = :group_id AND username = :username
+                """),
+                {"group_id": str(group_id), "username": username}
+            )
+            row = result.fetchone()
+            return row[0] if row else None
+
+    def save_notification(self, group_id: int, username: str, message_id: int):
+        """Save or update the last notification message ID"""
+        with self.get_connection() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO live_notification_messages (group_id, username, message_id, created_at)
+                    VALUES (:group_id, :username, :message_id, NOW())
+                    ON CONFLICT (group_id, username) DO UPDATE SET
+                        message_id = EXCLUDED.message_id,
+                        created_at = NOW()
+                """),
+                {"group_id": str(group_id), "username": username, "message_id": message_id}
+            )
+            conn.commit()
+
     def close(self):
         """Close database connections"""
         if hasattr(self, 'engine'):
