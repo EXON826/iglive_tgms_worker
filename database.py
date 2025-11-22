@@ -354,7 +354,9 @@ class DatabaseManager:
                 {"group_id": str(group_id), "username": username}
             )
             row = result.fetchone()
-            return row[0] if row else None
+            msg_id = row[0] if row else None
+            logger.debug(f"DB: get_last_notification({group_id}, {username}) -> {msg_id}")
+            return msg_id
 
     def save_notification(self, group_id: int, username: str, message_id: int):
         """Save or update the last notification message ID"""
@@ -370,6 +372,7 @@ class DatabaseManager:
                 {"group_id": str(group_id), "username": username, "message_id": message_id}
             )
             conn.commit()
+            logger.debug(f"DB: save_notification({group_id}, {username}, {message_id})")
 
     def close(self):
         """Close database connections"""
