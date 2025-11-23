@@ -29,6 +29,7 @@ class DatabaseManager:
             max_overflow=10,
             pool_timeout=30,
             pool_recycle=1800,
+            connect_args={"statement_cache_size": 0}
         )
         
         self.async_session_factory = sessionmaker(
