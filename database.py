@@ -41,6 +41,26 @@ class DatabaseManager:
         )
         logger.info("Async DatabaseManager initialized")
 
+    async def ensure_schema(self):
+        """Ensure the database schema is correct"""
+        async with self.get_session() as session:
+            try:
+                # Check if failure_count column exists in managed_groups
+                result = await session.execute(text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name='managed_groups' AND column_name='failure_count'
+                """))
+                if not result.fetchone():
+                    logger.info("Adding missing column 'failure_count' to managed_groups...")
+                    await session.execute(text("""
+                        ALTER TABLE managed_groups 
+                        ADD COLUMN IF NOT EXISTS failure_count INTEGER DEFAULT 0
+                    """))
+                    logger.info("Column 'failure_count' added successfully.")
+            except Exception as e:
+                logger.error(f"Error checking/updating schema: {e}")
+
     @asynccontextmanager
     async def get_session(self) -> AsyncSession:
         """Provide a transactional scope around a series of operations."""

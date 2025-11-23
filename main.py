@@ -368,6 +368,9 @@ def main(run_once=False):
     logger.info("TGMS Worker starting...")
     logger.info("Handles: Group management, join requests, broadcasting")
     
+    # Ensure database schema is correct
+    await db_manager.ensure_schema()
+    
     # Run worker
     try:
         asyncio.run(worker_main_loop(
