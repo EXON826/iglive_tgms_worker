@@ -130,9 +130,9 @@ class GroupMessageSender:
         for group in groups:
             group_id = group["group_id"]
             if caption:
-                caption_with_debug = f"{caption}\n\n[Debug: {debug_code}]"
+                caption_with_debug = f"{caption}\n\n[{debug_code}]"
             elif text:
-                text = f"{text}\n\n[Debug: {debug_code}]"
+                text = f"{text}\n\n[{debug_code}]"
             
             # Send message
             try:
@@ -149,26 +149,6 @@ class GroupMessageSender:
                 if photo_url:
                     response = self.api.send_photo(
                         chat_id=group_id,
-                        photo=photo_url,
-                        caption=caption_with_debug if caption else debug_code,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                else:
-                    response = self.api.send_message(
-                        chat_id=group_id,
-                        text=text,
-                            logger.error(f"Failed to save notification for {instagram_username} in {group_id}: {e}")
-
-                    self.db.reset_failure_count(group_id)
-                    results["success"] += 1
-                    results["sent_to"].append(group_id)
-                    logger.info(f"✓ Sent to group {group_id} ({debug_code})")
-                else:
-                    raise Exception(response.get("error", "Unknown error"))
-                    
-            except Exception as e:
-                error_msg = str(e)
                 logger.error(f"✗ Failed to send to group {group_id}: {error_msg}")
                 
                 # Check for critical Telegram errors
