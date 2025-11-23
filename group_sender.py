@@ -20,7 +20,7 @@ class GroupMessageSender:
         self.db = db_manager
         self.rate_limit = 5  # messages per second
         self.last_send_time = 0
-        self.max_consecutive_failures = 3
+        self.max_consecutive_failures = 7
     
     def _generate_debug_code(self) -> str:
         """Generate unique debug code"""
@@ -103,36 +103,6 @@ class GroupMessageSender:
                     except Exception as e:
                         logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {e}")
             
-            # Generate debug code
-            debug_code = self._generate_debug_code()
-            
-            # Add debug code to message
-            if caption:
-                caption_with_debug = f"{caption}\n\n{debug_code}"
-            elif text:
-                text = f"{text}\n\n{debug_code}"
-            
-            # Send message
-            try:
-                if photo_url:
-                    response = self.api.send_photo(
-                        chat_id=group_id,
-                        photo=photo_url,
-                        caption=caption_with_debug if caption else debug_code,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                else:
-                    response = self.api.send_message(
-                        chat_id=group_id,
-                        text=text,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                
-                if response.get("ok"):
-                    message_id = response.get("result", {}).get("message_id")
-                    
                     # Log sent message (non-critical)
                     try:
                         self.db.log_sent_message(group_id, message_id, debug_code)
