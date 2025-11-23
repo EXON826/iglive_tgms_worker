@@ -41,9 +41,11 @@ class DatabaseManager:
     async def get_session(self) -> AsyncSession:
         """Provide a transactional scope around a series of operations."""
         async with self.async_session_factory() as session:
+            logger.debug("Database session created")
             try:
                 yield session
                 await session.commit()
+                logger.debug("Database session committed")
             except Exception as e:
                 await session.rollback()
                 logger.error(f"Session rollback due to error: {e}")
@@ -271,6 +273,7 @@ class DatabaseManager:
 
     async def fetch_pending_job(self, bot_token: str) -> Optional[Dict[str, Any]]:
         """Fetch and lock a pending job"""
+        logger.debug(f"Fetching pending job for bot_token: {bot_token[:5]}...")
         async with self.get_session() as session:
             # Postgres specific: FOR UPDATE SKIP LOCKED
             result = await session.execute(
