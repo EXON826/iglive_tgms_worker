@@ -425,7 +425,8 @@ class DatabaseManager:
                 {"group_id": str(group_id), "username": username, "message_id": message_id}
             )
             conn.commit()
-            logger.debug(f"DB: save_notification({group_id}, {username}, {message_id})")
+            conn.commit()
+            logger.info(f"DB: save_notification({group_id}, {username}, {message_id}) - SAVED")
 
     def claim_notification_slot(self, group_id: int, username: str, debug_code: str) -> bool:
         """
@@ -448,8 +449,10 @@ class DatabaseManager:
                 created_at = row[0]
                 # If created less than 15 seconds ago, assume another job is handling it or just finished
                 if (datetime.now(timezone.utc) - created_at).total_seconds() < 15:
-                    logger.info(f"DB: Slot locked for {username} in {group_id} (created {created_at})")
+                    logger.info(f"DB: Slot locked for {username} in {group_id} (created {created_at}) - SKIPPING")
                     return False
+            
+            logger.info(f"DB: Claiming slot for {username} in {group_id} (debug_code: {debug_code})")
             
             # Update timestamp to 'claim' it (even if message_id is old)
             # We don't change message_id yet, just the timestamp to block others
