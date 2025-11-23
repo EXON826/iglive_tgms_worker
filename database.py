@@ -165,11 +165,14 @@ class DatabaseManager:
 
     async def reset_failure_count(self, group_id: int):
         """Reset failure count for a group"""
+        logger.debug(f"Resetting failure count for group {group_id}")
         async with self.get_session() as session:
+            logger.debug(f"Session acquired for reset_failure_count {group_id}")
             await session.execute(
                 text("UPDATE managed_groups SET failure_count = 0 WHERE group_id = :group_id"),
                 {"group_id": group_id}
             )
+            logger.debug(f"Failure count reset executed for {group_id}")
 
     async def increment_failure_count(self, group_id: int):
         """Increment failure count for a group"""
