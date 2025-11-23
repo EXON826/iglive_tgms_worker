@@ -13,6 +13,21 @@ logger = logging.getLogger(__name__)
 
 
 class GroupMessageSender:
+"""
+Group Message Sender
+Handles broadcasting messages to managed groups (Async)
+"""
+import logging
+import asyncio
+import time
+import uuid
+from telegram_api import TelegramAPI
+from database import DatabaseManager
+
+logger = logging.getLogger(__name__)
+
+
+class GroupMessageSender:
     """Handles sending messages to groups with rate limiting (Async)"""
     
     def __init__(self, bot_token: str, db_manager: DatabaseManager):
@@ -48,6 +63,61 @@ class GroupMessageSender:
                 "inline_keyboard": [[
                     {"text": "🚀 JOIN LIVE", "url": watch_link}
                 ]]
+            }
+        
+        for group in groups:
+            group_id = group['group_id']
+            debug_code = str(uuid.uuid4())[:8]
+            
+            # Claim notification slot (Locking)
+            if instagram_username:
+                logger.debug(f"Claiming slot for {group_id}...")
+                claimed, last_msg_id = await self.db.claim_notification_slot(group_id, instagram_username, debug_code)
+                logger.debug(f"Slot claim result for {group_id}: claimed={claimed}, last_msg_id={last_msg_id}")
+                if not claimed:
+                    logger.info(f"Skipping group {group_id} for {instagram_username} - Notification slot locked")
+                    continue
+
+                # Delete previous notification
+                if last_msg_id and last_msg_id > 0:
+                    try:
+                        delete_response = await self.api.delete_message(group_id, last_msg_id)
+                        if delete_response.get("ok"):
+                            logger.debug(f"Deleted previous notification {last_msg_id} for {instagram_username} in {group_id}")
+                            try:
+                                await self.db.log_deleted_message(group_id, last_msg_id, instagram_username)
+                            except Exception as e:
+                                logger.error(f"Failed to log deletion of {last_msg_id}: {e}")
+                        else:
+                            logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {delete_response.get('description')}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {e}")
+
+            # Send new message
+            try:
+                logger.debug(f"Sending message to {group_id}...")
+                if photo_url:
+                    response = await self.api.send_photo(
+                        chat_id=group_id,
+                        photo=photo_url,
+                        caption=caption,
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    response = await self.api.send_message(
+                        chat_id=group_id,
+                        text=text,
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                logger.debug(f"Message sent to {group_id}, response: {response.get('ok')}")
+                
+                if response.get("ok"):
+                    message_id = response['result']['message_id']
+                    success_count += 1
+                    logger.info(f"✓ Sent to group {group_id} (msg_id: {message_id})")
+                    
                     # Log success
                     await self.db.log_sent_message(group_id, message_id, debug_code)
                     
