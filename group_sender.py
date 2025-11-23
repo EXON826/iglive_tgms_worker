@@ -13,21 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 class GroupMessageSender:
-"""
-Group Message Sender
-Handles broadcasting messages to managed groups (Async)
-"""
-import logging
-import asyncio
-import time
-import uuid
-from telegram_api import TelegramAPI
-from database import DatabaseManager
-
-logger = logging.getLogger(__name__)
-
-
-class GroupMessageSender:
     """Handles sending messages to groups with rate limiting (Async)"""
     
     def __init__(self, bot_token: str, db_manager: DatabaseManager):
