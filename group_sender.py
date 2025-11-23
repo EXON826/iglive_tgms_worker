@@ -43,12 +43,6 @@ class GroupMessageSender:
             return None
             
         # Create inline keyboard with single URL button
-        inline_keyboard = {
-            "inline_keyboard": [
-                [
-                    {
-                        "text": "🚀 JOIN LIVE",
-                        "url": watch_link
 """
 Group message sender with rate limiting
 Handles broadcasting to managed groups
