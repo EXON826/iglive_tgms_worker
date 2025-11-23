@@ -48,57 +48,6 @@ class GroupMessageSender:
                 "inline_keyboard": [[
                     {"text": "🚀 JOIN LIVE", "url": watch_link}
                 ]]
-            }
-        
-        for group in groups:
-            group_id = group['group_id']
-            debug_code = str(uuid.uuid4())[:8]
-            
-            # Claim notification slot (Locking)
-            if instagram_username:
-                claimed, last_msg_id = await self.db.claim_notification_slot(group_id, instagram_username, debug_code)
-                if not claimed:
-                    logger.info(f"Skipping group {group_id} for {instagram_username} - Notification slot locked")
-                    continue
-
-                # Delete previous notification
-                if last_msg_id and last_msg_id > 0:
-                    try:
-                        delete_response = await self.api.delete_message(group_id, last_msg_id)
-                        if delete_response.get("ok"):
-                            logger.debug(f"Deleted previous notification {last_msg_id} for {instagram_username} in {group_id}")
-                            try:
-                                await self.db.log_deleted_message(group_id, last_msg_id, instagram_username)
-                            except Exception as e:
-                                logger.error(f"Failed to log deletion of {last_msg_id}: {e}")
-                        else:
-                            logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {delete_response.get('description')}")
-                    except Exception as e:
-                        logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {e}")
-
-            # Send new message
-            try:
-                if photo_url:
-                    response = await self.api.send_photo(
-                        chat_id=group_id,
-                        photo=photo_url,
-                        caption=caption,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                else:
-                    response = await self.api.send_message(
-                        chat_id=group_id,
-                        text=text,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                
-                if response.get("ok"):
-                    message_id = response['result']['message_id']
-                    success_count += 1
-                    logger.info(f"✓ Sent to group {group_id} (msg_id: {message_id})")
-                    
                     # Log success
                     await self.db.log_sent_message(group_id, message_id, debug_code)
                     
