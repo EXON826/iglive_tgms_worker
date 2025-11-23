@@ -103,7 +103,7 @@ class GroupMessageSender:
 
             # Claim notification slot (Locking)
             if instagram_username:
-                if not self.db.claim_notification_slot(group_id, instagram_username):
+                if not self.db.claim_notification_slot(group_id, instagram_username, debug_code):
                     logger.info(f"Skipping group {group_id} for {instagram_username} - Notification slot locked")
                     continue
 
