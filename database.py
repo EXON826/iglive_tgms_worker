@@ -314,35 +314,6 @@ class DatabaseManager:
         return True, current_message_id
 
     async def save_notification(self, group_id: int, username: str, message_id: int, session: AsyncSession = None):
-        """Save or update the last notification message ID"""
-        if session:
-            await self._save_notification_logic(session, group_id, username, message_id)
-        else:
-            async with self.get_session() as session:
-                await self._save_notification_logic(session, group_id, username, message_id)
-                
-    async def _save_notification_logic(self, session: AsyncSession, group_id: int, username: str, message_id: int):
-        await session.execute(
-            text("""
-                INSERT INTO live_notification_messages (group_id, username, message_id, created_at)
-                VALUES (:group_id, :username, :message_id, NOW())
-                ON CONFLICT (group_id, username) DO UPDATE SET
-                    message_id = EXCLUDED.message_id,
-                    created_at = NOW()
-            """),
-            {"group_id": str(group_id), "username": username, "message_id": message_id}
-        )
-        logger.info(f"DB: save_notification({group_id}, {username}, {message_id}) - SAVED")
-
-    async def fetch_pending_job(self, bot_token: str) -> Optional[Dict[str, Any]]:
-        """Fetch and lock a pending job"""
-        logger.debug(f"Fetching pending job for bot_token: {bot_token[:5]}...")
-        async with self.get_session() as session:
-            # Postgres specific: FOR UPDATE SKIP LOCKED
-            result = await session.execute(
-                text("""
-                    SELECT * FROM jobs
-                    WHERE status = 'pending'
                       AND bot_token = :bot_token
                     ORDER BY created_at
                     LIMIT 1
