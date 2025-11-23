@@ -290,6 +290,9 @@ async def worker_main_loop(db_manager, telegram_api, group_sender, join_handler,
     - Processes them
     - Updates job status
     """
+    # Ensure database schema is correct
+    await db_manager.ensure_schema()
+
     bot_token = os.environ.get('TGMS_BOT_TOKEN')
     run_once_retries = 0
     
@@ -368,8 +371,6 @@ def main(run_once=False):
     logger.info("TGMS Worker starting...")
     logger.info("Handles: Group management, join requests, broadcasting")
     
-    # Ensure database schema is correct
-    await db_manager.ensure_schema()
     
     # Run worker
     try:
