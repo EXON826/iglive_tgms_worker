@@ -4,6 +4,7 @@ Handles all database interactions using SQLAlchemy and asyncpg
 """
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
@@ -27,7 +28,10 @@ class DatabaseManager:
             database_url,
             echo=False,
             poolclass=NullPool,
-            connect_args={"statement_cache_size": 0}
+            connect_args={
+                "statement_cache_size": 0,
+                "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4()}__"
+            }
         )
         
         self.async_session_factory = sessionmaker(
