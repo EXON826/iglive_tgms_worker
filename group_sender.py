@@ -129,29 +129,6 @@ class GroupMessageSender:
         
         for group in groups:
             group_id = group["group_id"]
-            
-            # Check if final message allowed
-            if not group.get("final_message_allowed", True):
-                logger.debug(f"Skipping group {group_id} - final_message_allowed=False")
-                continue
-            
-            # Apply rate limiting
-            self._rate_limit_delay()
-
-            # Delete previous notification if username provided
-            if instagram_username:
-                last_msg_id = self.db.get_last_notification(group_id, instagram_username)
-                if last_msg_id:
-                    try:
-                        self.api.delete_message(group_id, last_msg_id)
-                        logger.debug(f"Deleted previous notification {last_msg_id} for {instagram_username} in {group_id}")
-                    except Exception as e:
-                        logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {e}")
-            
-            # Generate debug code
-            debug_code = self._generate_debug_code()
-            
-            # Add debug code to message
             if caption:
                 caption_with_debug = f"{caption}\n\n[Debug: {debug_code}]"
             elif text:
@@ -181,24 +158,6 @@ class GroupMessageSender:
                     response = self.api.send_message(
                         chat_id=group_id,
                         text=text,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                
-                if response.get("ok"):
-                    message_id = response.get("result", {}).get("message_id")
-                    
-                    # Log sent message (non-critical)
-                    try:
-                        self.db.log_sent_message(group_id, message_id, debug_code)
-                    except Exception as e:
-                        logger.error(f"Failed to log sent message {message_id} for group {group_id}: {e}")
-                    
-                    # Save notification for future deletion (CRITICAL)
-                    if instagram_username:
-                        try:
-                            self.db.save_notification(group_id, instagram_username, message_id)
-                        except Exception as e:
                             logger.error(f"Failed to save notification for {instagram_username} in {group_id}: {e}")
 
                     self.db.reset_failure_count(group_id)

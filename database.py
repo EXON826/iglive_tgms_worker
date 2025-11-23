@@ -220,7 +220,26 @@ class DatabaseManager:
                 }
             )
             conn.commit()
+            conn.commit()
             logger.debug(f"Logged sent message {message_id} to group {group_id}")
+
+    def log_deleted_message(self, group_id: int, message_id: int, username: str):
+        """Log a deleted message in the database"""
+        with self.get_connection() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO deleted_messages (group_id, message_id, username, deleted_at)
+                    VALUES (:group_id, :message_id, :username, NOW())
+                    ON CONFLICT DO NOTHING
+                """),
+                {
+                    "group_id": str(group_id),
+                    "message_id": message_id,
+                    "username": username,
+                }
+            )
+            conn.commit()
+            logger.debug(f"Logged deleted message {message_id} for {username} in {group_id}")
 
     def update_last_used_image_index(self, link_id: int, new_index: int):
         """Update the last_used_image_index for a specific insta_links record."""
@@ -406,6 +425,44 @@ class DatabaseManager:
             )
             conn.commit()
             logger.debug(f"DB: save_notification({group_id}, {username}, {message_id})")
+
+    def claim_notification_slot(self, group_id: int, username: str, debug_code: str) -> bool:
+        """
+        Attempt to claim the notification slot for a user in a group.
+        Returns True if claimed successfully, False if another job is processing.
+        """
+        with self.get_connection() as conn:
+            # Check if a recent notification exists (within last 10 seconds)
+            # This acts as a simple lock to prevent rapid-fire duplicates
+            result = conn.execute(
+                text("""
+                    SELECT created_at, message_id FROM live_notification_messages 
+                    WHERE group_id = :group_id AND username = :username
+                """),
+                {"group_id": str(group_id), "username": username}
+            )
+            row = result.fetchone()
+            
+            if row:
+                created_at = row[0]
+                # If created less than 15 seconds ago, assume another job is handling it or just finished
+                if (datetime.now(timezone.utc) - created_at).total_seconds() < 15:
+                    logger.info(f"DB: Slot locked for {username} in {group_id} (created {created_at})")
+                    return False
+            
+            # Update timestamp to 'claim' it (even if message_id is old)
+            # We don't change message_id yet, just the timestamp to block others
+            conn.execute(
+                text("""
+                    INSERT INTO live_notification_messages (group_id, username, message_id, created_at)
+                    VALUES (:group_id, :username, 0, NOW())
+                    ON CONFLICT (group_id, username) DO UPDATE SET
+                        created_at = NOW()
+                """),
+                {"group_id": str(group_id), "username": username}
+            )
+            conn.commit()
+            return True
 
     def close(self):
         """Close database connections"""
