@@ -89,29 +89,6 @@ class GroupMessageSender:
             if not group.get("final_message_allowed", True):
                 logger.debug(f"Skipping group {group_id} - final_message_allowed=False")
                 continue
-            
-            # Apply rate limiting
-            self._rate_limit_delay()
-
-            # Generate debug code
-            debug_code = self._generate_debug_code()
-                        photo=photo_url,
-                        caption=caption_with_debug if caption else debug_code,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                else:
-                    response = self.api.send_message(
-                        chat_id=group_id,
-                        text=text,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                
-                if response.get("ok"):
-                    message_id = response.get("result", {}).get("message_id")
-                    
-                    # Log sent message (non-critical)
                     try:
                         self.db.log_sent_message(group_id, message_id, debug_code)
                     except Exception as e:
