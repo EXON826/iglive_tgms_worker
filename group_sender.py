@@ -95,36 +95,6 @@ class GroupMessageSender:
 
             # Generate debug code
             debug_code = self._generate_debug_code()
-
-            if caption:
-                caption_with_debug = f"{caption}\n\n[{debug_code}]"
-            elif text:
-                text = f"{text}\n\n[{debug_code}]"
-
-            # Claim notification slot (Locking)
-            if instagram_username:
-                if not self.db.claim_notification_slot(group_id, instagram_username, debug_code):
-                    logger.info(f"Skipping group {group_id} for {instagram_username} - Notification slot locked")
-                    continue
-
-                # Delete previous notification
-                last_msg_id = self.db.get_last_notification(group_id, instagram_username)
-                if last_msg_id:
-                    try:
-                        self.api.delete_message(group_id, last_msg_id)
-                        logger.debug(f"Deleted previous notification {last_msg_id} for {instagram_username} in {group_id}")
-                        try:
-                            self.db.log_deleted_message(group_id, last_msg_id, instagram_username)
-                        except Exception as e:
-                            logger.error(f"Failed to log deletion of {last_msg_id}: {e}")
-                    except Exception as e:
-                        logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {e}")
-            
-            # Send message
-            try:
-                if photo_url:
-                    response = self.api.send_photo(
-                        chat_id=group_id,
                         photo=photo_url,
                         caption=caption_with_debug if caption else debug_code,
                         parse_mode="MarkdownV2",

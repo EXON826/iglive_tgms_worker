@@ -428,13 +428,13 @@ class DatabaseManager:
             conn.commit()
             logger.info(f"DB: save_notification({group_id}, {username}, {message_id}) - SAVED")
 
-    def claim_notification_slot(self, group_id: int, username: str, debug_code: str) -> bool:
+    def claim_notification_slot(self, group_id: int, username: str, debug_code: str) -> tuple[bool, int | None]:
         """
         Attempt to claim the notification slot for a user in a group.
-        Returns True if claimed successfully, False if another job is processing.
+        Returns (True, message_id) if claimed successfully, (False, None) if another job is processing.
         """
         with self.get_connection() as conn:
-            # Check if a recent notification exists (within last 10 seconds)
+            # Check if a recent notification exists (within last 15 seconds)
             # This acts as a simple lock to prevent rapid-fire duplicates
             result = conn.execute(
                 text("""
@@ -445,17 +445,19 @@ class DatabaseManager:
             )
             row = result.fetchone()
             
+            current_message_id = 0
             if row:
                 created_at = row[0]
+                current_message_id = row[1]
                 # If created less than 15 seconds ago, assume another job is handling it or just finished
                 if (datetime.now(timezone.utc) - created_at).total_seconds() < 15:
                     logger.info(f"DB: Slot locked for {username} in {group_id} (created {created_at}) - SKIPPING")
-                    return False
+                    return False, None
             
             logger.info(f"DB: Claiming slot for {username} in {group_id} (debug_code: {debug_code})")
             
-            # Update timestamp to 'claim' it (even if message_id is old)
-            # We don't change message_id yet, just the timestamp to block others
+            # Update timestamp to 'claim' it. We preserve the existing message_id if it exists.
+            # If it's a new record, message_id defaults to 0.
             conn.execute(
                 text("""
                     INSERT INTO live_notification_messages (group_id, username, message_id, created_at)
@@ -466,7 +468,7 @@ class DatabaseManager:
                 {"group_id": str(group_id), "username": username}
             )
             conn.commit()
-            return True
+            return True, current_message_id
 
     def close(self):
         """Close database connections"""
