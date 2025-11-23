@@ -4,6 +4,7 @@ Replaces SQLite-based DatabaseManager with PostgreSQL
 """
 import logging
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
