@@ -143,6 +143,22 @@ class GroupMessageSender:
                     
                     # Log sent message (non-critical)
                     try:
+                        self.db.log_sent_message(group_id, message_id, debug_code)
+                    except Exception as e:
+                        logger.error(f"Failed to log sent message {message_id} for group {group_id}: {e}")
+                    
+                    # Save notification for future deletion (CRITICAL)
+                    if instagram_username:
+                        try:
+                            logger.info(f"Attempting to save notification: {group_id}, {instagram_username}, {message_id}")
+                            self.db.save_notification(group_id, instagram_username, message_id)
+                        except Exception as e:
+                            logger.error(f"Failed to save notification for {instagram_username} in {group_id}: {e}")
+
+                    self.db.reset_failure_count(group_id)
+                    results["success"] += 1
+                    results["sent_to"].append(group_id)
+                    logger.info(f"✓ Sent to group {group_id} ({debug_code})")
                 else:
                     raise Exception(response.get("error", "Unknown error"))
                     
