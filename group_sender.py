@@ -89,6 +89,62 @@ class GroupMessageSender:
             if not group.get("final_message_allowed", True):
                 logger.debug(f"Skipping group {group_id} - final_message_allowed=False")
                 continue
+            
+            # Apply rate limiting
+            self._rate_limit_delay()
+
+            # Generate debug code
+            debug_code = self._generate_debug_code()
+
+            if caption:
+                caption_with_debug = f"{caption}\n\n[{debug_code}]"
+            elif text:
+                text = f"{text}\n\n[{debug_code}]"
+
+            # Claim notification slot (Locking)
+            if instagram_username:
+                claimed, last_msg_id = self.db.claim_notification_slot(group_id, instagram_username, debug_code)
+                if not claimed:
+                    logger.info(f"Skipping group {group_id} for {instagram_username} - Notification slot locked")
+                    continue
+
+                # Delete previous notification
+                if last_msg_id and last_msg_id > 0:
+                    try:
+                        del_res = self.api.delete_message(group_id, last_msg_id)
+                        if del_res.get("ok"):
+                            logger.debug(f"Deleted previous notification {last_msg_id} for {instagram_username} in {group_id}")
+                            try:
+                                self.db.log_deleted_message(group_id, last_msg_id, instagram_username)
+                            except Exception as e:
+                                logger.error(f"Failed to log deletion of {last_msg_id}: {e}")
+                        else:
+                            logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {del_res.get('description')}")
+                    except Exception as e:
+                        logger.warning(f"Exception deleting previous message {last_msg_id} in {group_id}: {e}")
+            
+            # Send message
+            try:
+                if photo_url:
+                    response = self.api.send_photo(
+                        chat_id=group_id,
+                        photo=photo_url,
+                        caption=caption_with_debug if caption else debug_code,
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    response = self.api.send_message(
+                        chat_id=group_id,
+                        text=text,
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                
+                if response.get("ok"):
+                    message_id = response.get("result", {}).get("message_id")
+                    
+                    # Log sent message (non-critical)
                     try:
                         self.db.log_sent_message(group_id, message_id, debug_code)
                     except Exception as e:
