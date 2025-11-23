@@ -171,6 +171,7 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
 
             if not username:
                 logger.error(f"Could not extract username from job payload for job_id: {job_id}")
+                return False # Abort job if username cannot be identified
             else:
                 insta_link_details = db_manager.get_insta_link(username)
 
