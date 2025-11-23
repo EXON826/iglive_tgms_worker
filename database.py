@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
 
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
@@ -25,10 +26,7 @@ class DatabaseManager:
         self.engine = create_async_engine(
             database_url,
             echo=False,
-            pool_size=20,
-            max_overflow=10,
-            pool_timeout=30,
-            pool_recycle=1800,
+            poolclass=NullPool,
             connect_args={"statement_cache_size": 0}
         )
         
