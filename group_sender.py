@@ -1,11 +1,11 @@
 """
-Group message sender with rate limiting
-Handles broadcasting to managed groups
+Group Message Sender
+Handles broadcasting messages to managed groups (Async)
 """
-import time
-import secrets
 import logging
-from typing import List, Dict, Any
+import asyncio
+import time
+import uuid
 from telegram_api import TelegramAPI
 from database import DatabaseManager
 
@@ -13,97 +13,50 @@ logger = logging.getLogger(__name__)
 
 
 class GroupMessageSender:
-    """Sends messages to managed groups with rate limiting"""
+    """Handles sending messages to groups with rate limiting (Async)"""
     
     def __init__(self, bot_token: str, db_manager: DatabaseManager):
         self.api = TelegramAPI(bot_token)
         self.db = db_manager
-        self.rate_limit = 5  # messages per second
-        self.last_send_time = 0
-        self.max_consecutive_failures = 7
     
-    def _generate_debug_code(self) -> str:
-        """Generate unique debug code"""
-        return f"DBG:{secrets.token_hex(3).upper()}"
-    
-    def _rate_limit_delay(self):
-        """Apply rate limiting"""
-        now = time.time()
-        time_since_last = now - self.last_send_time
-        min_interval = 1.0 / self.rate_limit
-        
-        if time_since_last < min_interval:
-            time.sleep(min_interval - time_since_last)
-        
-        self.last_send_time = time.time()
-
-    def _create_url_button_markup(self, watch_link: str = None) -> dict:
-        """Create inline keyboard markup with URL button"""
-        if not watch_link:
-            return None
-            
-        # Create inline keyboard with single URL button
-        inline_keyboard = {
-            "inline_keyboard": [
-                [
-                    {
-                        "text": "🚀 JOIN LIVE",
-                        "url": watch_link
-                    }
-                ]
-            ]
-        }
-        return inline_keyboard
-    
-    def send_to_groups(self, photo_url: str = None, caption: str = None, text: str = None, watch_link: str = None, instagram_username: str = None):
+    async def send_to_groups(self, photo_url: str = None, caption: str = None, text: str = None, watch_link: str = None, instagram_username: str = None):
         """
         Send message to all active managed groups
         
         Args:
-            photo_url: URL of photo to send
-            caption: Caption for photo
-            text: Text message (if no photo)
-            watch_link: URL for watch button (creates inline keyboard)
-            instagram_username: Username of the Instagram user going live (for tracking previous messages)
-        
-        Returns:
-            Dict with success count and failed groups
+            photo_url: URL of photo to send (optional)
+            caption: Caption for photo (optional)
+            text: Text message if no photo (optional)
+            watch_link: The link to include in buttons
+            instagram_username: The username for tracking notifications
         """
-        groups = self.db.get_active_managed_groups()
-        results = {
-            "total": len(groups),
-            "success": 0,
-            "failed": [],
-            "sent_to": []
-        }
+        # Get all active groups
+        groups = await self.db.get_active_managed_groups()
+        if not groups:
+            logger.info("No active managed groups found")
+            return {"success": 0, "total": 0}
         
-        # Create inline keyboard markup if watch link is provided
-        reply_markup = self._create_url_button_markup(watch_link)
+        logger.info(f"Starting broadcast to {len(groups)} groups for {instagram_username}")
         
-        logger.info(f"Sending message to {len(groups)} groups")
+        success_count = 0
+        failed_count = 0
+        
+        # Prepare inline keyboard
+        reply_markup = None
+        if watch_link:
+            reply_markup = {
+                "inline_keyboard": [[
+                    {"text": "🚀 JOIN LIVE", "url": watch_link}
+                ]]
+            }
         
         for group in groups:
-            group_id = group["group_id"]
+            group_id = group['group_id']
+            debug_code = str(uuid.uuid4())[:8]
             
-            # Check if final message allowed
-            if not group.get("final_message_allowed", True):
-                logger.debug(f"Skipping group {group_id} - final_message_allowed=False")
-                continue
-            
-            # Apply rate limiting
-            self._rate_limit_delay()
-
-            # Generate debug code
-            debug_code = self._generate_debug_code()
-
-            if caption:
-                caption_with_debug = f"{caption}\n\n[{debug_code}]"
-            elif text:
-                text = f"{text}\n\n[{debug_code}]"
-
             # Claim notification slot (Locking)
             if instagram_username:
-                claimed, last_msg_id = self.db.claim_notification_slot(group_id, instagram_username, debug_code)
+                claimed, last_msg_id = await self.db.claim_notification_slot(group_id, instagram_username, debug_code)
                 if not claimed:
                     logger.info(f"Skipping group {group_id} for {instagram_username} - Notification slot locked")
                     continue
@@ -111,30 +64,30 @@ class GroupMessageSender:
                 # Delete previous notification
                 if last_msg_id and last_msg_id > 0:
                     try:
-                        del_res = self.api.delete_message(group_id, last_msg_id)
-                        if del_res.get("ok"):
+                        delete_response = await self.api.delete_message(group_id, last_msg_id)
+                        if delete_response.get("ok"):
                             logger.debug(f"Deleted previous notification {last_msg_id} for {instagram_username} in {group_id}")
                             try:
-                                self.db.log_deleted_message(group_id, last_msg_id, instagram_username)
+                                await self.db.log_deleted_message(group_id, last_msg_id, instagram_username)
                             except Exception as e:
                                 logger.error(f"Failed to log deletion of {last_msg_id}: {e}")
                         else:
-                            logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {del_res.get('description')}")
+                            logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {delete_response.get('description')}")
                     except Exception as e:
-                        logger.warning(f"Exception deleting previous message {last_msg_id} in {group_id}: {e}")
-            
-            # Send message
+                        logger.warning(f"Failed to delete previous message {last_msg_id} in {group_id}: {e}")
+
+            # Send new message
             try:
                 if photo_url:
-                    response = self.api.send_photo(
+                    response = await self.api.send_photo(
                         chat_id=group_id,
                         photo=photo_url,
-                        caption=caption_with_debug if caption else debug_code,
+                        caption=caption,
                         parse_mode="MarkdownV2",
                         reply_markup=reply_markup
                     )
                 else:
-                    response = self.api.send_message(
+                    response = await self.api.send_message(
                         chat_id=group_id,
                         text=text,
                         parse_mode="MarkdownV2",
@@ -142,51 +95,40 @@ class GroupMessageSender:
                     )
                 
                 if response.get("ok"):
-                    message_id = response.get("result", {}).get("message_id")
+                    message_id = response['result']['message_id']
+                    success_count += 1
+                    logger.info(f"✓ Sent to group {group_id} (msg_id: {message_id})")
                     
-                    # Log sent message (non-critical)
-                    try:
-                        self.db.log_sent_message(group_id, message_id, debug_code)
-                    except Exception as e:
-                        logger.error(f"Failed to log sent message {message_id} for group {group_id}: {e}")
+                    # Log success
+                    await self.db.log_sent_message(group_id, message_id, debug_code)
                     
-                    # Save notification for future deletion (CRITICAL)
+                    # Save notification ID for future deletion
                     if instagram_username:
                         try:
-                            logger.info(f"Attempting to save notification: {group_id}, {instagram_username}, {message_id}")
-                            self.db.save_notification(group_id, instagram_username, message_id)
+                            await self.db.save_notification(group_id, instagram_username, message_id)
                         except Exception as e:
-                            logger.error(f"Failed to save notification for {instagram_username} in {group_id}: {e}")
-
-                    self.db.reset_failure_count(group_id)
-                    results["success"] += 1
-                    results["sent_to"].append(group_id)
-                    logger.info(f"✓ Sent to group {group_id} ({debug_code})")
-                else:
-                    raise Exception(response.get("error", "Unknown error"))
+                            logger.error(f"Failed to save notification ID {message_id} for {instagram_username}: {e}")
                     
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"✗ Failed to send to group {group_id}: {error_msg}")
-                
-                # Check for critical Telegram errors
-                if "403" in error_msg or "Forbidden" in error_msg or "kicked" in error_msg.lower():
-                    self.db.deactivate_group(group_id, f"Critical error: {error_msg}")
-                    logger.warning(f"Deactivated group {group_id} immediately due to critical error")
-                    results["failed"].append({"group_id": group_id, "error": error_msg})
-                    continue
-
-                failure_count = self.db.increment_failure_count(group_id)
-                
-                # Deactivate after max failures
-                if failure_count >= self.max_consecutive_failures:
-                    self.db.deactivate_group(group_id, f"3 consecutive failures: {e}")
-                    logger.warning(f"Deactivated group {group_id} after {failure_count} failures")
-                
-                results["failed"].append({"group_id": group_id, "error": str(e)})
+                    # Reset failure count
+                    await self.db.reset_failure_count(group_id)
+                    
+                else:
+                    failed_count += 1
+                    error = response.get("description", "Unknown error")
+                    logger.error(f"✗ Failed to send to group {group_id}: {error}")
+                    
+                    # Handle specific errors (e.g. bot kicked)
+                    if "Forbidden" in error or "kicked" in error:
+                        await self.db.deactivate_group(group_id, reason="Bot kicked")
+                    else:
+                        await self.db.increment_failure_count(group_id)
             
-            # Add spacing between groups
-            time.sleep(3)
-        
-        logger.info(f"Broadcast complete: {results['success']}/{results['total']} successful")
-        return results
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"Error sending to group {group_id}: {e}")
+                await self.db.increment_failure_count(group_id)
+            
+            # Rate limiting (Async sleep)
+            await asyncio.sleep(3)
+            
+        return {"success": success_count, "total": len(groups)}

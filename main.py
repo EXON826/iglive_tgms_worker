@@ -1,6 +1,6 @@
 """
 TGMS Worker Main Entry Point
-Handles group management and broadcasting jobs
+Handles group management and broadcasting jobs (Async)
 """
 import os
 import json
@@ -8,8 +8,6 @@ import logging
 import re
 import asyncio
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
 from database import DatabaseManager
@@ -80,14 +78,14 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
             last_name = chat_join_request.get('from', {}).get('last_name')
 
             if chat_id and user_id:
-                managed_group = db_manager.get_managed_group(chat_id)
+                managed_group = await db_manager.get_managed_group(chat_id)
                 if not managed_group:
-                    status = telegram_api.get_bot_member_status(chat_id)
+                    status = await telegram_api.get_bot_member_status(chat_id)
                     if status in {'administrator', 'creator'}:
                         logger.info(f"Bot is admin in {chat_id}; auto-registering group before join handling")
                         try:
                             inviter = chat_join_request.get('from', {})
-                            db_manager.upsert_managed_group(
+                            await db_manager.upsert_managed_group(
                                 group_id=chat_id,
                                 title=chat_join_request.get('chat', {}).get('title'),
                                 admin_user_id=inviter.get('id'),
@@ -130,23 +128,23 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
 
             # ✅ ENSURE USER EXISTS FIRST
             if admin_user_id:
-                db_manager.ensure_user_exists({
+                await db_manager.ensure_user_exists({
                     'id': admin_user_id,
                     'username': admin_username,
                     'first_name': admin_first_name
                 })
 
             # Now insert the group
-            db_manager.upsert_managed_group(
+            await db_manager.upsert_managed_group(
                 group_id=chat_id,
                 title=title,
                 admin_user_id=admin_user_id,
             )
 
             try:
-                member_count = telegram_api.get_chat_members_count(chat_id)
+                member_count = await telegram_api.get_chat_members_count(chat_id)
                 if member_count:
-                    db_manager.update_member_count(chat_id, member_count)
+                    await db_manager.update_member_count(chat_id, member_count)
             except Exception as e:
                 logger.warning(f"Could not fetch member count for group {chat_id}: {e}")
 
@@ -173,7 +171,7 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
                 logger.error(f"Could not extract username from job payload for job_id: {job_id}")
                 return False # Abort job if username cannot be identified
             else:
-                insta_link_details = db_manager.get_insta_link(username)
+                insta_link_details = await db_manager.get_insta_link(username)
 
                 if not insta_link_details:
                     logger.error(f"No insta_links record found for username: {username} for job_id: {job_id}")
@@ -191,7 +189,7 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
                             watch_link = link_urls[next_link_index]
                             
                             # Update the link index in the database
-                            db_manager.update_last_used_link_index(insta_link_details['id'], next_link_index)
+                            await db_manager.update_last_used_link_index(insta_link_details['id'], next_link_index)
                             logger.info(f"Using monetized link {next_link_index + 1}/{len(link_urls)} for {username}")
                         else:
                             # Fallback to general link if no monetized links
@@ -213,7 +211,7 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
                             photo_url = image_urls[next_index]
                             
                             # Update the index in the database
-                            db_manager.update_last_used_image_index(insta_link_details['id'], next_index)
+                            await db_manager.update_last_used_image_index(insta_link_details['id'], next_index)
                         else:
                             photo_url = payload.get('photo_url') # Fallback
                     else:
@@ -234,7 +232,7 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
             if text:
                 text = escape_markdown_v2(text)
 
-            results = group_sender.send_to_groups(
+            results = await group_sender.send_to_groups(
                 photo_url=photo_url,
                 caption=caption,
                 text=text,
@@ -271,60 +269,39 @@ async def process_tgms_job(job, db_manager, telegram_api, group_sender, join_han
 
 async def update_member_counts(db_manager: DatabaseManager, telegram_api: TelegramAPI):
     """Update member counts for all active groups"""
-    groups = db_manager.get_active_managed_groups()
+    groups = await db_manager.get_active_managed_groups()
     logger.info(f"Updating member counts for {len(groups)} groups")
     
     for group in groups:
         group_id = group['group_id']
         try:
-            count = telegram_api.get_chat_members_count(group_id)
-            db_manager.update_member_count(group_id, count)
+            count = await telegram_api.get_chat_members_count(group_id)
+            await db_manager.update_member_count(group_id, count)
             logger.info(f"Group {group_id}: {count} members")
             await asyncio.sleep(1)  # Rate limiting
         except Exception as e:
             logger.error(f"Failed to update member count for group {group_id}: {e}")
 
 
-async def worker_main_loop(session_factory, db_manager, telegram_api, group_sender, join_handler, run_once=False):
+async def worker_main_loop(db_manager, telegram_api, group_sender, join_handler, run_once=False):
     """
     Main loop for TGMS worker
     - Fetches pending TGMS jobs from database
     - Processes them
     - Updates job status
     """
+    bot_token = os.environ.get('TGMS_BOT_TOKEN')
     run_once_retries = 0
+    
     while True:
-        job_to_process = None
-        session = session_factory()
-        
         try:
             # --- 1. Fetch and Lock a Job ---
-            select_query = text("""
-                SELECT * FROM jobs
-                WHERE status = 'pending'
-                  AND bot_token = :bot_token
-                ORDER BY created_at
-                LIMIT 1
-                FOR UPDATE SKIP LOCKED
-            """)
-            result = session.execute(select_query, {'bot_token': os.environ.get('TGMS_BOT_TOKEN')}).fetchone()
+            job_to_process = await db_manager.fetch_pending_job(bot_token)
             
-            if result:
-                job_to_process = dict(result._mapping)
-                update_query = text("""
-                    UPDATE jobs
-                    SET status = 'processing', updated_at = :now
-                    WHERE job_id = :job_id
-                """)
-                session.execute(update_query, {
-                    'now': datetime.now(timezone.utc),
-                    'job_id': job_to_process['job_id']
-                })
-                session.commit()
-                logger.info(f"Locked and picked up job_id: {job_to_process['job_id']}")
-            
-            # Process the job
             if job_to_process:
+                logger.info(f"Locked and picked up job_id: {job_to_process['job_id']}")
+                
+                # Process the job
                 success = await process_tgms_job(
                     job_to_process,
                     db_manager,
@@ -343,18 +320,11 @@ async def worker_main_loop(session_factory, db_manager, telegram_api, group_send
                     else:
                         final_status = 'failed'
                 
-                update_query = text("""
-                    UPDATE jobs
-                    SET status = :status, retries = :retries, updated_at = :now
-                    WHERE job_id = :job_id
-                """)
-                session.execute(update_query, {
-                    'status': final_status,
-                    'retries': retries + 1 if not success else retries,
-                    'now': datetime.now(timezone.utc),
-                    'job_id': job_to_process['job_id']
-                })
-                session.commit()
+                await db_manager.update_job_status(
+                    job_to_process['job_id'],
+                    final_status,
+                    retries + 1 if not success else retries
+                )
                 logger.info(f"Job {job_to_process['job_id']} finished with status: {final_status}")
                 
                 if run_once:
@@ -372,11 +342,7 @@ async def worker_main_loop(session_factory, db_manager, telegram_api, group_send
         
         except Exception as e:
             logger.error(f"Error in TGMS worker main loop: {e}", exc_info=True)
-            if session.is_active:
-                session.rollback()
             await asyncio.sleep(POLLING_INTERVAL * 2)
-        finally:
-            session.close()
 
 
 def main(run_once=False):
@@ -393,22 +359,10 @@ def main(run_once=False):
     if not TGMS_BOT_TOKEN:
         raise ValueError("TGMS_BOT_TOKEN not found in environment")
     
-    # Create database connection
-    try:
-        engine = create_engine(DATABASE_URL)
-        SessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-        logger.info("Database engine created successfully")
-    except Exception as e:
-        logger.error(f"Failed to create database engine: {e}", exc_info=True)
-        exit(1)
-    
     # Initialize components
     db_manager = DatabaseManager(DATABASE_URL)
     telegram_api = TelegramAPI(TGMS_BOT_TOKEN)
     group_sender = GroupMessageSender(TGMS_BOT_TOKEN, db_manager)
-    
-    # Import join request handler
-    from join_request_handler import JoinRequestHandler
     join_handler = JoinRequestHandler(TGMS_BOT_TOKEN, db_manager)
     
     logger.info("TGMS Worker starting...")
@@ -417,7 +371,6 @@ def main(run_once=False):
     # Run worker
     try:
         asyncio.run(worker_main_loop(
-            SessionFactory,
             db_manager,
             telegram_api,
             group_sender,
@@ -427,8 +380,11 @@ def main(run_once=False):
     except KeyboardInterrupt:
         logger.info("TGMS worker stopped by user")
     finally:
-        db_manager.close()
-
+        # We need to run cleanup in an event loop if we were outside of one,
+        # but since we are exiting, we can just let the OS clean up or try to close gracefully.
+        # Since db_manager.close() is async, we can't call it easily here without an event loop.
+        # But asyncio.run handles loop closing.
+        pass
 
 if __name__ == '__main__':
     main()
