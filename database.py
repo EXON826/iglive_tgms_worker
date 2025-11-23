@@ -153,43 +153,64 @@ class DatabaseManager:
                 {"count": count, "group_id": group_id}
             )
 
-    async def log_sent_message(self, group_id: int, message_id: int, debug_code: str):
+    async def log_sent_message(self, group_id: int, message_id: int, debug_code: str, session: AsyncSession = None):
         """Log a successfully sent message"""
         # This table might need to be created if it doesn't exist, but assuming it does based on context
         pass 
 
-    async def log_deleted_message(self, group_id: int, message_id: int, username: str):
+    async def log_deleted_message(self, group_id: int, message_id: int, username: str, session: AsyncSession = None):
         """Log a deleted message"""
         # Placeholder for logging logic
         pass
 
-    async def reset_failure_count(self, group_id: int):
+    async def reset_failure_count(self, group_id: int, session: AsyncSession = None):
         """Reset failure count for a group"""
         logger.debug(f"Resetting failure count for group {group_id}")
-        async with self.get_session() as session:
-            logger.debug(f"Session acquired for reset_failure_count {group_id}")
+        
+        if session:
             await session.execute(
                 text("UPDATE managed_groups SET failure_count = 0 WHERE group_id = :group_id"),
                 {"group_id": group_id}
             )
-            logger.debug(f"Failure count reset executed for {group_id}")
+            logger.debug(f"Failure count reset executed for {group_id} (existing session)")
+        else:
+            async with self.get_session() as session:
+                logger.debug(f"Session acquired for reset_failure_count {group_id}")
+                await session.execute(
+                    text("UPDATE managed_groups SET failure_count = 0 WHERE group_id = :group_id"),
+                    {"group_id": group_id}
+                )
+                logger.debug(f"Failure count reset executed for {group_id}")
 
-    async def increment_failure_count(self, group_id: int):
+    async def increment_failure_count(self, group_id: int, session: AsyncSession = None):
         """Increment failure count for a group"""
-        async with self.get_session() as session:
+        if session:
             await session.execute(
                 text("UPDATE managed_groups SET failure_count = COALESCE(failure_count, 0) + 1 WHERE group_id = :group_id"),
                 {"group_id": group_id}
             )
+        else:
+            async with self.get_session() as session:
+                await session.execute(
+                    text("UPDATE managed_groups SET failure_count = COALESCE(failure_count, 0) + 1 WHERE group_id = :group_id"),
+                    {"group_id": group_id}
+                )
 
-    async def deactivate_group(self, group_id: int, reason: str):
+    async def deactivate_group(self, group_id: int, reason: str, session: AsyncSession = None):
         """Deactivate a group"""
-        async with self.get_session() as session:
+        if session:
             await session.execute(
                 text("UPDATE managed_groups SET is_active = false, deactivation_reason = :reason WHERE group_id = :group_id"),
                 {"group_id": group_id, "reason": reason}
             )
             logger.warning(f"Deactivated group {group_id}: {reason}")
+        else:
+            async with self.get_session() as session:
+                await session.execute(
+                    text("UPDATE managed_groups SET is_active = false, deactivation_reason = :reason WHERE group_id = :group_id"),
+                    {"group_id": group_id, "reason": reason}
+                )
+                logger.warning(f"Deactivated group {group_id}: {reason}")
 
     async def update_last_used_link_index(self, link_id: int, index: int):
         """Update the last used link index"""
@@ -223,60 +244,71 @@ class DatabaseManager:
                 user_data
             )
 
-    async def claim_notification_slot(self, group_id: int, username: str, debug_code: str) -> Tuple[bool, Optional[int]]:
+    async def claim_notification_slot(self, group_id: int, username: str, debug_code: str, session: AsyncSession = None) -> Tuple[bool, Optional[int]]:
         """
         Attempt to claim the notification slot for a user in a group.
         Returns (True, message_id) if claimed successfully, (False, None) if another job is processing.
         """
-        async with self.get_session() as session:
-            # Check if a recent notification exists (within last 15 seconds)
-            result = await session.execute(
-                text("""
-                    SELECT created_at, message_id FROM live_notification_messages 
-                    WHERE group_id = :group_id AND username = :username
-                """),
-                {"group_id": str(group_id), "username": username}
-            )
-            row = result.fetchone()
-            
-            current_message_id = 0
-            if row:
-                created_at = row[0]
-                current_message_id = row[1]
-                # If created less than 15 seconds ago, assume another job is handling it or just finished
-                if (datetime.now(timezone.utc) - created_at).total_seconds() < 15:
-                    logger.info(f"DB: Slot locked for {username} in {group_id} (created {created_at}) - SKIPPING")
-                    return False, None
-            
-            logger.info(f"DB: Claiming slot for {username} in {group_id} (debug_code: {debug_code})")
-            
-            # Update timestamp to 'claim' it.
-            await session.execute(
-                text("""
-                    INSERT INTO live_notification_messages (group_id, username, message_id, created_at)
-                    VALUES (:group_id, :username, 0, NOW())
-                    ON CONFLICT (group_id, username) DO UPDATE SET
-                        created_at = NOW()
-                """),
-                {"group_id": str(group_id), "username": username}
-            )
-            # Commit happens automatically via context manager
-            return True, current_message_id
+        if session:
+            return await self._claim_notification_slot_logic(session, group_id, username, debug_code)
+        else:
+            async with self.get_session() as session:
+                return await self._claim_notification_slot_logic(session, group_id, username, debug_code)
 
-    async def save_notification(self, group_id: int, username: str, message_id: int):
+    async def _claim_notification_slot_logic(self, session: AsyncSession, group_id: int, username: str, debug_code: str) -> Tuple[bool, Optional[int]]:
+        # Check if a recent notification exists (within last 15 seconds)
+        result = await session.execute(
+            text("""
+                SELECT created_at, message_id FROM live_notification_messages 
+                WHERE group_id = :group_id AND username = :username
+            """),
+            {"group_id": str(group_id), "username": username}
+        )
+        row = result.fetchone()
+        
+        current_message_id = 0
+        if row:
+            created_at = row[0]
+            current_message_id = row[1]
+            # If created less than 15 seconds ago, assume another job is handling it or just finished
+            if (datetime.now(timezone.utc) - created_at).total_seconds() < 15:
+                logger.info(f"DB: Slot locked for {username} in {group_id} (created {created_at}) - SKIPPING")
+                return False, None
+        
+        logger.info(f"DB: Claiming slot for {username} in {group_id} (debug_code: {debug_code})")
+        
+        # Update timestamp to 'claim' it.
+        await session.execute(
+            text("""
+                INSERT INTO live_notification_messages (group_id, username, message_id, created_at)
+                VALUES (:group_id, :username, 0, NOW())
+                ON CONFLICT (group_id, username) DO UPDATE SET
+                    created_at = NOW()
+            """),
+            {"group_id": str(group_id), "username": username}
+        )
+        return True, current_message_id
+
+    async def save_notification(self, group_id: int, username: str, message_id: int, session: AsyncSession = None):
         """Save or update the last notification message ID"""
-        async with self.get_session() as session:
-            await session.execute(
-                text("""
-                    INSERT INTO live_notification_messages (group_id, username, message_id, created_at)
-                    VALUES (:group_id, :username, :message_id, NOW())
-                    ON CONFLICT (group_id, username) DO UPDATE SET
-                        message_id = EXCLUDED.message_id,
-                        created_at = NOW()
-                """),
-                {"group_id": str(group_id), "username": username, "message_id": message_id}
-            )
-            logger.info(f"DB: save_notification({group_id}, {username}, {message_id}) - SAVED")
+        if session:
+            await self._save_notification_logic(session, group_id, username, message_id)
+        else:
+            async with self.get_session() as session:
+                await self._save_notification_logic(session, group_id, username, message_id)
+                
+    async def _save_notification_logic(self, session: AsyncSession, group_id: int, username: str, message_id: int):
+        await session.execute(
+            text("""
+                INSERT INTO live_notification_messages (group_id, username, message_id, created_at)
+                VALUES (:group_id, :username, :message_id, NOW())
+                ON CONFLICT (group_id, username) DO UPDATE SET
+                    message_id = EXCLUDED.message_id,
+                    created_at = NOW()
+            """),
+            {"group_id": str(group_id), "username": username, "message_id": message_id}
+        )
+        logger.info(f"DB: save_notification({group_id}, {username}, {message_id}) - SAVED")
 
     async def fetch_pending_job(self, bot_token: str) -> Optional[Dict[str, Any]]:
         """Fetch and lock a pending job"""
