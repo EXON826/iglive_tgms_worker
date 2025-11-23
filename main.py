@@ -292,6 +292,7 @@ async def worker_main_loop(db_manager, telegram_api, group_sender, join_handler,
     """
     # Ensure database schema is correct
     await db_manager.ensure_schema()
+    logger.info("Schema check complete. Starting worker loop...")
 
     bot_token = os.environ.get('TGMS_BOT_TOKEN')
     run_once_retries = 0

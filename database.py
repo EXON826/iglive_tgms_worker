@@ -43,6 +43,7 @@ class DatabaseManager:
 
     async def ensure_schema(self):
         """Ensure the database schema is correct"""
+        logger.debug("Checking schema...")
         async with self.get_session() as session:
             try:
                 # Check if failure_count column exists in managed_groups
@@ -58,8 +59,11 @@ class DatabaseManager:
                         ADD COLUMN IF NOT EXISTS failure_count INTEGER DEFAULT 0
                     """))
                     logger.info("Column 'failure_count' added successfully.")
+                else:
+                    logger.debug("Schema check: failure_count column exists.")
             except Exception as e:
                 logger.error(f"Error checking/updating schema: {e}")
+        logger.debug("Schema check completed (session closed).")
 
     @asynccontextmanager
     async def get_session(self) -> AsyncSession:
