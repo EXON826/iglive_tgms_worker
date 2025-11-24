@@ -404,7 +404,7 @@ class DatabaseManager:
                     SELECT message_id FROM live_notification_messages 
                     WHERE group_id = :group_id AND username = :username
                 """),
-                {"group_id": str(group_id), "username": username}
+                {"group_id": group_id, "username": username}
             )
             row = result.fetchone()
             msg_id = row[0] if row else None
@@ -422,9 +422,8 @@ class DatabaseManager:
                         message_id = EXCLUDED.message_id,
                         created_at = NOW()
                 """),
-                {"group_id": str(group_id), "username": username, "message_id": message_id}
+                {"group_id": group_id, "username": username, "message_id": message_id}
             )
-            conn.commit()
             conn.commit()
             logger.info(f"DB: save_notification({group_id}, {username}, {message_id}) - SAVED")
 
@@ -441,14 +440,14 @@ class DatabaseManager:
                     SELECT created_at, message_id FROM live_notification_messages 
                     WHERE group_id = :group_id AND username = :username
                 """),
-                {"group_id": str(group_id), "username": username}
+                {"group_id": group_id, "username": username}
             )
             row = result.fetchone()
             
-            current_message_id = 0
+            current_message_id = None
             if row:
                 created_at = row[0]
-                current_message_id = row[1]
+                current_message_id = row[1] if row[1] and row[1] > 0 else None
                 # If created less than 15 seconds ago, assume another job is handling it or just finished
                 if (datetime.now(timezone.utc) - created_at).total_seconds() < 15:
                     logger.info(f"DB: Slot locked for {username} in {group_id} (created {created_at}) - SKIPPING")
@@ -465,7 +464,7 @@ class DatabaseManager:
                     ON CONFLICT (group_id, username) DO UPDATE SET
                         created_at = NOW()
                 """),
-                {"group_id": str(group_id), "username": username}
+                {"group_id": group_id, "username": username}
             )
             conn.commit()
             return True, current_message_id
