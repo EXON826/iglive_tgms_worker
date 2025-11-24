@@ -447,11 +447,16 @@ class DatabaseManager:
             current_message_id = None
             if row:
                 created_at = row[0]
+                raw_msg_id = row[1]
+                logger.info(f"DB: Found record - created_at={created_at}, raw_message_id={raw_msg_id} ({type(raw_msg_id).__name__})")
                 current_message_id = row[1] if row[1] and row[1] > 0 else None
+                logger.info(f"DB: After validation - current_message_id={current_message_id}")
                 # If created less than 15 seconds ago, assume another job is handling it or just finished
                 if (datetime.now(timezone.utc) - created_at).total_seconds() < 15:
                     logger.info(f"DB: Slot locked for {username} in {group_id} (created {created_at}) - SKIPPING")
                     return False, None
+            else:
+                logger.info(f"DB: No existing record for {username} in {group_id}")
             
             logger.info(f"DB: Claiming slot for {username} in {group_id} (debug_code: {debug_code})")
             
