@@ -404,7 +404,7 @@ class DatabaseManager:
                     SELECT message_id FROM live_notification_messages 
                     WHERE group_id = :group_id AND username = :username
                 """),
-                {"group_id": group_id, "username": username}
+                {"group_id": str(group_id), "username": username}
             )
             row = result.fetchone()
             msg_id = row[0] if row else None
@@ -422,7 +422,7 @@ class DatabaseManager:
                         message_id = EXCLUDED.message_id,
                         created_at = NOW()
                 """),
-                {"group_id": group_id, "username": username, "message_id": message_id}
+                {"group_id": str(group_id), "username": username, "message_id": message_id}
             )
             conn.commit()
             logger.info(f"DB: save_notification({group_id}, {username}, {message_id}) - SAVED")
@@ -440,7 +440,7 @@ class DatabaseManager:
                     SELECT created_at, message_id FROM live_notification_messages 
                     WHERE group_id = :group_id AND username = :username
                 """),
-                {"group_id": group_id, "username": username}
+                {"group_id": str(group_id), "username": username}
             )
             row = result.fetchone()
             
@@ -464,7 +464,7 @@ class DatabaseManager:
                     ON CONFLICT (group_id, username) DO UPDATE SET
                         created_at = NOW()
                 """),
-                {"group_id": group_id, "username": username}
+                {"group_id": str(group_id), "username": username}
             )
             conn.commit()
             return True, current_message_id
